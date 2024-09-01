@@ -1537,10 +1537,11 @@ def generate_engine_classes_bindings(api, output_dir, use_template_get_node):
         used_classes = []
         expanded_format = native_struct["format"].replace("(", " ").replace(")", ";").replace(",", ";")
         for field in expanded_format.split(";"):
-            field_type = field.strip().split(" ")[0].split("::")[0]
-            if field_type != "" and not is_included_type(field_type) and not is_pod_type(field_type):
-                if field_type not in used_classes:
-                    used_classes.append(field_type)
+            top_field_type = field.strip().split(" ")[0].split("::")[0]
+            for field_type in extract_from_template(top_field_type): # Extract from template
+                if field_type != "" and not is_included_type(field_type) and not is_pod_type(field_type):
+                    if field_type not in used_classes:
+                        used_classes.append(field_type)
 
         result.append("")
 
@@ -2931,6 +2932,32 @@ def get_default_value_for_type(type_name):
     if is_refcounted(type_name):
         return f"Ref<{type_name}>()"
     return "nullptr"
+
+def extract_from_template(type_name:str):
+    """
+    Extract subtypes that may be used by a template class
+    e.g. Map<string,float> -> (string, float)
+    """
+    # templates = ["CowData",
+    #             "HashMap",
+    #             "HashMapElement",
+    #             "Vector",
+    #             "VSet",
+    #             "VMap",
+    #             "SelfList"
+    #             ]
+    start = type_name.find("<")
+    if start < 0:
+        return (type_name,)
+    end = type_name.rfind(">")
+    if end < 0: # Probably malformed, but it will be dealt with later
+        return (type_name,)
+
+    sub_names = type_name[start+1:end].split(",")
+    extractions = map(extract_from_template, sub_names) # Deal with nested templates
+    flattened = (name for sub_name in extractions for name in sub_name)
+    return tuple(set(flattened)) # Keep only unique
+    
 
 
 header = """\
